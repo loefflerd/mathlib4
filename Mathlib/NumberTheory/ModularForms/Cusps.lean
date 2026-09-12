@@ -214,16 +214,8 @@ noncomputable def conj (G : Subgroup (GL (Fin 2) ℝ)) (g : GL (Fin 2) ℝ) :
 
 lemma conj_bijective (G : Subgroup (GL (Fin 2) ℝ)) (g : GL (Fin 2) ℝ) :
     Function.Bijective (conj G g) := by
-  constructor
-  · refine Quotient.forall.mpr fun c ↦ Quotient.forall.mpr fun d h ↦ ?_
-    obtain ⟨a, ha⟩ := Quotient.eq.mp h
-    refine Quotient.eq.mpr ⟨⟨ConjAct.toConjAct g⁻¹ • a.val, ?_⟩, ?_⟩
-    · exact G.mem_pointwise_smul_iff_inv_smul_mem.mp a.property
-    · have ha' : (a : GL (Fin 2) ℝ) • (g • d.val) = g • c.val := congr(Subtype.val $ha)
-      ext
-      simpa [-ConjAct.toConjAct_inv, -map_inv, ConjAct.toConjAct_smul, mul_smul, inv_smul_eq_iff]
-  · refine Quotient.forall.mpr fun c ↦ ⟨⟦⟨g⁻¹ • c.val, ?_⟩⟧, by simp⟩
-    simpa [← mul_smul, ← ConjAct.toConjAct_mul] using c.property.smul g⁻¹
+  refine Function.bijective_iff_has_inverse.mpr ⟨map (by simp) ∘ conj _ g⁻¹, ?_, ?_⟩ <;>
+    exact Quotient.ind fun _ ↦ congrArg _ <| Subtype.ext <| by simp
 
 @[simp] lemma map_conj (hGH : G ≤ H) (g : GL (Fin 2) ℝ) (c : CuspOrbits G) :
     map (by simpa) (conj G g c) = conj H g (map hGH c) := by
@@ -603,26 +595,16 @@ lemma widthInfty_conj_of_upperTriangular_abs {G : Subgroup (GL (Fin 2) ℝ)}
     [DiscreteTopology G] (hw : 0 < G.widthInfty)
     {g : GL (Fin 2) ℝ} (hg : g 1 0 = 0) :
     (ConjAct.toConjAct g⁻¹ • G).widthInfty = G.widthInfty / |g 0 0 / g 1 1| := by
-  have ha : 0 < |g 0 0 / g 1 1| := by
-    simpa [Matrix.det_fin_two, hg] using g.det_ne_zero
-  have hperiods : (ConjAct.toConjAct g⁻¹ • G.adjoinNegOne).strictPeriods =
-      AddSubgroup.zmultiples (G.widthInfty / |g 0 0 / g 1 1|) := by
-    ext x
-    rw [mem_strictPeriods_conj_of_upperTriangular hg,
-      strictPeriods_eq_zmultiples_strictWidthInfty]
-    rcases le_total 0 (g 0 0 / g 1 1) with h | h
-    · rw [abs_of_nonneg h]
-      grind [AddSubgroup.mem_zmultiples_iff, widthInfty]
-    · rw [abs_of_nonpos h]
-      constructor <;> exact fun ⟨m, hm⟩ ↦ ⟨-m, by grind [widthInfty]⟩
+  have ha : 0 < |g 0 0 / g 1 1| := by simpa [Matrix.det_fin_two, hg] using g.det_ne_zero
   have hp : 0 < G.widthInfty / |g 0 0 / g 1 1| := div_pos hw ha
-  rw [strictPeriods_eq_zmultiples_strictWidthInfty, Eq.comm,
-    AddSubgroup.zmultiples_eq_zmultiples_iff
-      (not_isOfFinAddOrder_of_isAddTorsionFree hp.ne')] at hperiods
-  rw [widthInfty, adjoinNegOne_conj]
-  have hn : 0 ≤ (ConjAct.toConjAct g⁻¹ • G.adjoinNegOne).strictWidthInfty :=
-    strictWidthInfty_nonneg _
-  grind
+  refine .symm <| ((AddSubgroup.zmultiples_eq_zmultiples_iff
+    (not_isOfFinAddOrder_of_isAddTorsionFree hp.ne')).mp ?_).resolve_right ?_
+  · ext
+    rw [← abs_of_nonneg G.widthInfty_nonneg, ← abs_div, zmultiples_abs,
+      ← periods_eq_zmultiples_widthInfty, Subgroup.periods, adjoinNegOne_conj,
+      mem_strictPeriods_conj_of_upperTriangular hg, strictPeriods_eq_zmultiples_strictWidthInfty]
+    grind [AddSubgroup.mem_zmultiples_iff, widthInfty]
+  · grind [widthInfty_nonneg]
 
 /-- In a discrete determinant-one group with a cusp at infinity, every element fixing
 infinity is a signed translation. -/
@@ -632,16 +614,11 @@ lemma eq_upperRightHom_or_neg_of_upperTriangular
     g = upperRightHom (g 0 1) ∨ g = -upperRightHom (-g 0 1) := by
   have hdet : g 0 0 * g 1 1 = 1 := by
     simpa [Matrix.det_fin_two, hg] using congrArg Units.val (HasDetOne.det_eq hgG)
-  have hd : g 1 1 ≠ 0 := by grind
-  have ha : 0 < g 0 0 / g 1 1 := div_pos_iff.mpr <| mul_pos_iff.mp <| by grind
-  have hwidth : G.widthInfty = G.widthInfty / (g 0 0 / g 1 1) := by
-    simpa only [G.conjAct_pointwise_smul_eq_self (G.le_normalizer (G.inv_mem hgG))] using
-      widthInfty_conj_of_upperTriangular hw hg ha
+  have hwidth := widthInfty_conj_of_upperTriangular_abs hw hg
+  rw [conjAct_pointwise_smul_eq_self (G.le_normalizer (G.inv_mem hgG))] at hwidth
   have heq : g 0 0 = g 1 1 := by grind
   rcases (show g 1 1 = 1 ∨ g 1 1 = -1 by grind) with h | h <;> [left; right] <;>
-  · apply Units.ext
-    ext i j
-    fin_cases i <;> fin_cases j <;> simp [hg, heq, h]
+    simp [Units.ext_iff, ← Matrix.ext_iff, hg, heq, h]
 
 end Real
 
